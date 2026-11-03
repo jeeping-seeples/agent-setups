@@ -1,0 +1,21 @@
+#!/usr/bin/env bash
+# Installs the coloured, width-aware agy quota status line and points agy at it.
+set -euo pipefail
+DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+DEST="$HOME/.gemini/antigravity-cli"
+mkdir -p "$DEST"
+cp "$DIR/agy-statusline-quota.py" "$DEST/statusline-quota.py"
+chmod +x "$DEST/statusline-quota.py"
+
+python3 - <<'PY'
+import json, pathlib
+p = pathlib.Path.home() / ".gemini/antigravity-cli/settings.json"
+try:
+    d = json.loads(p.read_text()) if p.exists() else {}
+except json.JSONDecodeError:
+    d = {}
+d["statusLine"] = {"type": "command", "command": str(p.parent / "statusline-quota.py")}
+p.parent.mkdir(parents=True, exist_ok=True)
+p.write_text(json.dumps(d, indent=2))
+print("wrote", p)
+PY
