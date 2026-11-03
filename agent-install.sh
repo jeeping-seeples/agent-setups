@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
-# Installs Codex, Copilot CLI, Cursor Agent, Antigravity. One failure doesn't stop the rest.
+# Installs Codex, Copilot CLI, Cursor Agent, Antigravity, Opencode. One failure doesn't stop the rest.
 set -uo pipefail
-export PATH="$HOME/.local/bin:$HOME/.bun/bin:$PATH"
+export PATH="$HOME/.local/bin:$HOME/.bun/bin:$HOME/.opencode/bin:$PATH"
 rc=0
 try() { "$@" || { echo "FAILED: $*" >&2; rc=1; }; }
 
@@ -21,6 +21,12 @@ if command -v agy >/dev/null 2>&1 || [ -x "$HOME/.local/bin/agy" ]; then
   echo "agy already installed"
 else
   try bash -c 'curl -fsSL https://antigravity.google/cli/install.sh | bash'
+fi
+
+if command -v opencode >/dev/null 2>&1 || [ -x "$HOME/.opencode/bin/opencode" ]; then
+  echo "opencode already installed"
+else
+  try bash -c 'curl -fsSL https://opencode.ai/v2/install | bash'
 fi
 
 exit $rc
