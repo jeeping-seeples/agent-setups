@@ -1,0 +1,26 @@
+#!/usr/bin/env bash
+# Sets Codex's built-in status line to include 5h + weekly quota. Merges into an existing [tui] section.
+set -euo pipefail
+mkdir -p "$HOME/.codex"
+python3 - <<'PY'
+import re, pathlib
+p = pathlib.Path.home() / ".codex/config.toml"
+text = p.read_text() if p.exists() else ""
+line = ('status_line = ["model-with-reasoning", "current-dir", '
+        '"context-remaining", "five-hour-limit", "weekly-limit"]')
+m = re.search(r'(?m)^\[tui\]\s*$', text)
+if not m:
+    text = text.rstrip("\n") + ("\n\n" if text.strip() else "") + "[tui]\n" + line + "\n"
+else:
+    start = m.end()
+    n = re.search(r'(?m)^\[', text[start:])
+    end = start + n.start() if n else len(text)
+    sec = text[start:end]
+    if re.search(r'(?m)^status_line\s*=', sec):
+        sec = re.sub(r'(?ms)^status_line\s*=\s*\[.*?\]', lambda _: line, sec, count=1)
+    else:
+        sec = "\n" + line + "\n" + sec.lstrip("\n")
+    text = text[:start] + sec + text[end:]
+p.write_text(text)
+print("wrote", p)
+PY
