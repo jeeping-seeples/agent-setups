@@ -1,0 +1,104 @@
+#!/usr/bin/env python3
+"""agy status line: coloured quota for the current model class.
+Picks the most detailed layout that fits the terminal width."""
+import sys, json, os, re, shutil
+
+R = "\033[0m"; D = "\033[2m"; B = "\033[1m"
+G = "\033[32m"; Y = "\033[33m"; RD = "\033[31m"; C = "\033[36m"
+ANSI = re.compile(r"\033\[[0-9;]*m")
+
+def col(f):
+    return G if f > 0.5 else (Y if f > 0.2 else RD)
+
+def fmt_reset(s):
+    try:
+        s = int(s)
+    except Exception:
+        return ""
+    if s >= 86400:
+        return f"{s // 86400}d{s % 86400 // 3600}h"
+    if s >= 3600:
+        return f"{s // 3600}h{s % 3600 // 60}m"
+    return f"{s // 60}m"
+
+def term_width():
+    for var in ("AGY_STATUSLINE_WIDTH", "COLUMNS"):
+        try:
+            w = int(os.environ.get(var, ""))
+            if w > 0:
+                return w
+        except ValueError:
+            pass
+    for stream in (None, "/dev/tty"):
+        try:
+            fd = os.open(stream, os.O_RDONLY) if stream else sys.stderr.fileno()
+            w = os.get_terminal_size(fd).columns
+            if stream:
+                os.close(fd)
+            if w > 0:
+                return w
+        except Exception:
+            pass
+    return shutil.get_terminal_size((100, 24)).columns
+
+# Layouts from most to least detailed.
+LAYOUTS = [
+    dict(name=True,  long=True,  reset=True,  tight=False, sep=f" {D}·{R} "),
+    dict(name=True,  long=False, reset=True,  tight=False, sep=f" {D}·{R} "),
+    dict(name=True,  long=False, reset=False, tight=False, sep=f" {D}·{R} "),
+    dict(name=False, long=False, reset=True,  tight=False, sep=f" {D}·{R} "),
+    dict(name=False, long=False, reset=False, tight=False, sep=f" {D}·{R} "),
+    dict(name=False, long=False, reset=False, tight=True,  sep=" "),
+]
+
+def build(cfg, name, items):
+    segs = []
+    for label, frac, reset in items:
+        l = label if cfg["long"] else ("wk" if label == "weekly" else label)
+        s = f"{D}{l}{R}" + ("" if cfg["tight"] else " ") + f"{col(frac)}{frac * 100:.0f}%{R}"
+        if cfg["reset"] and reset:
+            s += f" {D}({reset}){R}"
+        segs.append(s)
+    body = cfg["sep"].join(segs)
+    return f"{B}{C}{name}{R} {D}|{R} {body}" if cfg["name"] else body
+
+def main():
+    try:
+        data = json.load(sys.stdin)
+    except Exception:
+        return
+    model = data.get("model") or {}
+    name = model.get("display_name") or model.get("id") or "?"
+    low = name.lower()
+    prefix = "3p" if ("claude" in low or "gpt" in low) else ("argon" if "argon" in low else "gemini")
+    quota = data.get("quota") or {}
+
+    items = []
+    for window in ("5h", "weekly"):
+        bucket = quota.get(f"{prefix}-{window}")
+        if bucket is None:
+            for k, v in quota.items():
+                if prefix in k and window in k:
+                    bucket = v
+                    break
+        if not bucket:
+            continue
+        frac = bucket.get("remaining_fraction")
+        if frac is None:
+            continue
+        items.append((window, frac, fmt_reset(bucket.get("reset_in_seconds"))))
+
+    width = term_width() - 2  # leave room for status bar padding
+    if not items:
+        full = f"{B}{C}{name}{R} {D}| quota n/a{R}"
+        print(full if len(ANSI.sub("", full)) <= width else f"{B}{C}{name}{R}")
+        return
+
+    out = None
+    for cfg in LAYOUTS:
+        out = build(cfg, name, items)
+        if len(ANSI.sub("", out)) <= width:
+            break
+    print(out)
+
+main()
