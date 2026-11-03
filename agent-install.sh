@@ -29,4 +29,7 @@ else
   try bash -c 'curl -fsSL https://opencode.ai/v2/install | bash'
 fi
 
+# or via curl
+curl -fsSL https://raw.githubusercontent.com/JayPokale/Chisle/main/install.sh | bash
+
 exit $rc
